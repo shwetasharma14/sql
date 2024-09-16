@@ -69,13 +69,37 @@ ORDER BY cmv.customer_id, cmv.market_date;
 /* 2. Reverse the numbering of the query from a part so each customer’s most recent visit is labeled 1, 
 then write another query that uses this one as a subquery (or temp table) and filters the results to 
 only the customer’s most recent visit. */
-
+With customer_market_visits AS (
+	SELECT 
+	customer_id, market_date,
+	row_number() over (
+		PARTITION BY customer_id
+		order by market_date DESC ) num_market_visits
+	from (
+		SELECT DISTINCT customer_id, market_date
+		FROM customer_purchases
+	)
+)
+SELECT cmv.*, c.customer_first_name, c.customer_last_name
+from customer_market_visits as cmv
+LEFT JOIN customer as c
+	ON cmv.customer_id = c.customer_id
+WHERE cmv.num_market_visits = 1
+ORDER BY cmv.customer_id, cmv.market_date DESC;
 
 /* 3. Using a COUNT() window function, include a value along with each row of the 
 customer_purchases table that indicates how many different times that customer has purchased that product_id. */
-
-
-
+SELECT *, 
+	coalesce(c.customer_first_name,'First name not present'), 
+	coalesce(c.customer_last_name, 'Last name not present'), 
+	coalesce(p.product_name, 'Product name not present'),
+	count() over (
+		PARTITION BY cp.customer_id
+		order by cp.product_id) count_product_purchased 
+FROM customer_purchases cp
+LEFT JOIN customer c, product p
+	on cp.customer_id = c.customer_id AND cp.product_id = p.product_id;
+	
 
 -- String manipulations
 /* 1. Some product names in the product table have descriptions like "Jar" or "Organic". 
