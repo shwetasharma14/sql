@@ -17,7 +17,9 @@ The `||` values concatenate the columns into strings.
 Edit the appropriate columns -- you're making two edits -- and the NULL rows will be fixed. 
 All the other rows will remain the same.) */
 
-
+SELECT 
+product_name || ', ' || coalesce(product_size, '')|| ' (' || coalesce(product_qty_type, 'unit') || ')' as product_data
+FROM product;
 
 
 --Windowed Functions
@@ -30,6 +32,39 @@ each new market date for each customer, or select only the unique market dates p
 (without purchase details) and number those visits. 
 HINT: One of these approaches uses ROW_NUMBER() and one uses DENSE_RANK(). */
 
+-- Option 1: Display all rows in the customer_purchases table, with the counter changing on each new market date for each customer.
+
+With customer_market_visits AS (
+	SELECT 
+	*,
+	dense_rank() over (
+		PARTITION BY customer_id
+		order by market_date ASC ) num_market_visits
+	from customer_purchases
+)
+SELECT cmv.*, c.customer_first_name, c.customer_last_name
+from customer_market_visits as cmv
+LEFT JOIN customer as c
+ON cmv.customer_id = c.customer_id
+ORDER BY cmv.customer_id, cmv.market_date;
+
+-- Option 2: Select only the unique market dates per customer (without purchase details) and number those visits. 
+With customer_market_visits AS (
+	SELECT 
+	customer_id, market_date,
+	row_number() over (
+		PARTITION BY customer_id
+		order by market_date ASC ) num_market_visits
+	from (
+		SELECT DISTINCT customer_id, market_date
+		FROM customer_purchases
+	)
+)
+SELECT cmv.*, c.customer_first_name, c.customer_last_name
+from customer_market_visits as cmv
+LEFT JOIN customer as c
+ON cmv.customer_id = c.customer_id
+ORDER BY cmv.customer_id, cmv.market_date;
 
 /* 2. Reverse the numbering of the query from a part so each customer’s most recent visit is labeled 1, 
 then write another query that uses this one as a subquery (or temp table) and filters the results to 
