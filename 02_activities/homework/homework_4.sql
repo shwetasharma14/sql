@@ -134,6 +134,27 @@ HINT: There are a possibly a few ways to do this query, but if you're struggling
 3) Query the second temp table twice, once for the best day, once for the worst day, 
 with a UNION binding them. */
 
+With sales_ranks as (
+	With sales as (
+		SELECT 
+			market_date, 
+			sum((quantity * cost_to_customer_per_qty)) as sale_amount_on_each_day
+		from customer_purchases
+		GROUP BY market_date
+		ORDER BY sale_amount_on_each_day DESC
+	)
+	SELECT *, 
+		dense_rank() over(ORDER BY sale_amount_on_each_day) as sales_rank
+	from sales
+	order by sales_rank DESC
+)
+SELECT *
+	from sales_ranks 
+	where sales_rank = 1
+UNION ALL
+SELECT *
+	from sales_ranks 
+LIMIT 2;
 
 
 
