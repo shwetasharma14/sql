@@ -17,7 +17,9 @@ The `||` values concatenate the columns into strings.
 Edit the appropriate columns -- you're making two edits -- and the NULL rows will be fixed. 
 All the other rows will remain the same.) */
 
-
+SELECT 
+product_name || ', ' || coalesce(product_size, '')|| ' (' || coalesce(product_qty_type, 'unit') || ')' as product_data
+FROM product;
 
 
 --Windowed Functions
@@ -30,17 +32,74 @@ each new market date for each customer, or select only the unique market dates p
 (without purchase details) and number those visits. 
 HINT: One of these approaches uses ROW_NUMBER() and one uses DENSE_RANK(). */
 
+-- Option 1: Display all rows in the customer_purchases table, with the counter changing on each new market date for each customer.
+
+With customer_market_visits AS (
+	SELECT 
+	*,
+	dense_rank() over (
+		PARTITION BY customer_id
+		order by market_date ASC ) num_market_visits
+	from customer_purchases
+)
+SELECT cmv.*, c.customer_first_name, c.customer_last_name
+from customer_market_visits as cmv
+LEFT JOIN customer as c
+ON cmv.customer_id = c.customer_id
+ORDER BY cmv.customer_id, cmv.market_date;
+
+-- Option 2: Select only the unique market dates per customer (without purchase details) and number those visits. 
+With customer_market_visits AS (
+	SELECT 
+	customer_id, market_date,
+	row_number() over (
+		PARTITION BY customer_id
+		order by market_date ASC ) num_market_visits
+	from (
+		SELECT DISTINCT customer_id, market_date
+		FROM customer_purchases
+	)
+)
+SELECT cmv.*, c.customer_first_name, c.customer_last_name
+from customer_market_visits as cmv
+LEFT JOIN customer as c
+ON cmv.customer_id = c.customer_id
+ORDER BY cmv.customer_id, cmv.market_date;
 
 /* 2. Reverse the numbering of the query from a part so each customer’s most recent visit is labeled 1, 
 then write another query that uses this one as a subquery (or temp table) and filters the results to 
 only the customer’s most recent visit. */
-
+With customer_market_visits AS (
+	SELECT 
+	customer_id, market_date,
+	row_number() over (
+		PARTITION BY customer_id
+		order by market_date DESC ) num_market_visits
+	from (
+		SELECT DISTINCT customer_id, market_date
+		FROM customer_purchases
+	)
+)
+SELECT cmv.*, c.customer_first_name, c.customer_last_name
+from customer_market_visits as cmv
+LEFT JOIN customer as c
+	ON cmv.customer_id = c.customer_id
+WHERE cmv.num_market_visits = 1
+ORDER BY cmv.customer_id, cmv.market_date DESC;
 
 /* 3. Using a COUNT() window function, include a value along with each row of the 
 customer_purchases table that indicates how many different times that customer has purchased that product_id. */
-
-
-
+SELECT *, 
+	coalesce(c.customer_first_name,'First name not present'), 
+	coalesce(c.customer_last_name, 'Last name not present'), 
+	coalesce(p.product_name, 'Product name not present'),
+	count() over (
+		PARTITION BY cp.customer_id
+		order by cp.product_id) count_product_purchased 
+FROM customer_purchases cp
+LEFT JOIN customer c, product p
+	on cp.customer_id = c.customer_id AND cp.product_id = p.product_id;
+	
 
 -- String manipulations
 /* 1. Some product names in the product table have descriptions like "Jar" or "Organic". 
@@ -53,11 +112,16 @@ Remove any trailing or leading whitespaces. Don't just use a case statement for 
 | Habanero Peppers - Organic | Organic     |
 
 Hint: you might need to use INSTR(product_name,'-') to find the hyphens. INSTR will help split the column. */
-
+SELECT product_name, 
+trim(substr(product_name, instr(product_name, '-')+1)) description
+from product;
 
 
 /* 2. Filter the query to show any product_size value that contain a number with REGEXP. */
-
+SELECT product_name, product_size,
+trim(substr(product_name, instr(product_name, '-')+1)) description
+from product
+where product_size REGEXP '.*\d+.*';
 
 
 -- UNION
@@ -70,6 +134,27 @@ HINT: There are a possibly a few ways to do this query, but if you're struggling
 3) Query the second temp table twice, once for the best day, once for the worst day, 
 with a UNION binding them. */
 
+With sales_ranks as (
+	With sales as (
+		SELECT 
+			market_date, 
+			sum((quantity * cost_to_customer_per_qty)) as sale_amount_on_each_day
+		from customer_purchases
+		GROUP BY market_date
+		ORDER BY sale_amount_on_each_day DESC
+	)
+	SELECT *, 
+		dense_rank() over(ORDER BY sale_amount_on_each_day) as sales_rank
+	from sales
+	order by sales_rank DESC
+)
+SELECT *
+	from sales_ranks 
+	where sales_rank = 1
+UNION ALL
+SELECT *
+	from sales_ranks 
+LIMIT 2;
 
 
 
